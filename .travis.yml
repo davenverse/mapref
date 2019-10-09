@@ -24,7 +24,7 @@ script:
 
 after_success:
   - test $TRAVIS_PULL_REQUEST == "false" && test $TRAVIS_BRANCH == "master" && test $TRAVIS_REPO_SLUG == "ChristopherDavenport/mapref" && sbt ++$TRAVIS_SCALA_VERSION publish
-  - test $TRAVIS_PULL_REQUEST == "false" && test $TRAVIS_BRANCH == "master" && test $TRAVIS_REPO_SLUG == "ChristopherDavenport/mapref" && test $TRAVIS_SCALA_VERSION == "2.12.8" && sbt docs/publishMicrosite
+  - test $TRAVIS_PULL_REQUEST == "false" && test $TRAVIS_BRANCH == "master" && test $TRAVIS_REPO_SLUG == "ChristopherDavenport/mapref" && test $TRAVIS_SCALA_VERSION == "2.12.9" && sbt ++$TRAVIS_SCALA_VERSION docs/publishMicrosite
 
 cache:
   directories:

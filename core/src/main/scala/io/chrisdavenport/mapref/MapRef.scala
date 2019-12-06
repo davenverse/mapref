@@ -313,6 +313,12 @@ object MapRef  {
   }
 
   /**
+   * Takes a ConcurrentHashMap, giving you access to the mutable state from the constructor.
+   **/
+  def fromConcurrentHashMap[F[_]: Sync, K, V](map: ConcurrentHashMap[K, V]): MapRef[F, K, Option[V]] = 
+    new ConcurrentHashMapImpl[F, K, V](map, Sync[F])
+
+  /**
    * This allocates mutable memory, so it has to be inside F. The way to use things like this is to
    * allocate one then `.map` them inside of constructors that need to access them.
    *
@@ -325,9 +331,9 @@ object MapRef  {
     loadFactor: Float = 0.75f,
     concurrencyLevel: Int = 16
   ): G[MapRef[F, K, Option[V]]] =
-    Sync[G].delay(
-      new ConcurrentHashMapImpl[F, K, V](new ConcurrentHashMap[K, V](initialCapacity, loadFactor, concurrencyLevel),
-                        Sync[F]))
+    Sync[G].delay{
+      fromConcurrentHashMap[F, K, V](new ConcurrentHashMap[K, V](initialCapacity, loadFactor, concurrencyLevel))
+    }
 
   /**
    * This allocates mutable memory, so it has to be inside F. The way to use things like this is to

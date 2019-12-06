@@ -147,17 +147,27 @@ object MapRef  {
     def apply(k: K): Ref[F,Option[V]] = new HandleRef(k)
   }
 
-  /**
+/**
    * Creates a sharded map ref to reduce atomic contention on the Map,
    * given an efficient and equally distributed Hash, the contention
    * should allow for interaction like a general datastructure.
    */
-  def fromShardedImmutableMapRef[F[_]: Sync, K, V](
+  def ofShardedImmutableMap[ F[_]: Sync, K, V](
     shardCount: Int
-  ): F[MapRef[F, K, Option[V]]] = Sync[F].suspend{
+  ): F[MapRef[F, K, Option[V]]]  = 
+    inShardedImmutableMap[F, F, K, V](shardCount)
+
+  /**
+   * Creates a sharded map ref to reduce atomic contention on the Map,
+   * given an efficient and equally distributed Hash, the contention
+   * should allow for interaction like a general datastructure. Created in G, operates in F.
+   */
+  def inShardedImmutableMap[G[_]: Sync, F[_]: Sync, K, V](
+    shardCount: Int
+  ): G[MapRef[F, K, Option[V]]] = Sync[G].suspend{
     assert(shardCount >= 1, "MapRef.sharded should have at least 1 shard")
     List.fill(shardCount)(())
-      .traverse(_ => Ref.of[F, Map[K, V]](Map.empty))
+      .traverse(_ => Ref.in[G, F, Map[K, V]](Map.empty))
       .map(_.toArray)
       .map{array => 
         val refFunction = {k: K => 
@@ -171,8 +181,14 @@ object MapRef  {
   /**
    * Heavy Contention on Use
    */
-  def fromSingleImmutableMap[F[_]: Sync, K, V](map: Map[K, V] = Map.empty[K, V]): F[MapRef[F, K, Option[V]]] = 
-    Ref.of[F, Map[K, V]](map)
+  def ofSingleImmutableMap[F[_]: Sync, K, V](map: Map[K, V] = Map.empty[K, V]): F[MapRef[F, K, Option[V]]] = 
+    inSingleImmutableMap[F, F, K, V](map)
+  
+  /**
+   * Heavy Contention on Use. Created in G, operates in F.
+   **/
+  def inSingleImmutableMap[G[_]: Sync, F[_]: Sync, K, V](map: Map[K, V] = Map.empty[K, V]): G[MapRef[F, K, Option[V]]] = 
+    Ref.in[G, F, Map[K, V]](map)
       .map(fromSingleImmutableMapRef[F, K, V])
 
   /**
@@ -300,18 +316,33 @@ object MapRef  {
    * This allocates mutable memory, so it has to be inside F. The way to use things like this is to
    * allocate one then `.map` them inside of constructors that need to access them.
    *
+   * It is usually a mistake to have a `G[RefMap[F, K, V]]` field. You want `RefMap[F, K, V]` field
+   * which means the thing that needs it will also have to be inside of `F[_]`, which is because
+   * it needs access to mutable state so allocating it is also an effect.
+   */
+  def inConcurrentHashMap[G[_]: Sync, F[_]: Sync, K, V](
+    initialCapacity: Int = 16,
+    loadFactor: Float = 0.75f,
+    concurrencyLevel: Int = 16
+  ): G[MapRef[F, K, Option[V]]] =
+    Sync[G].delay(
+      new ConcurrentHashMapImpl[F, K, V](new ConcurrentHashMap[K, V](initialCapacity, loadFactor, concurrencyLevel),
+                        Sync[F]))
+
+  /**
+   * This allocates mutable memory, so it has to be inside F. The way to use things like this is to
+   * allocate one then `.map` them inside of constructors that need to access them.
+   *
    * It is usually a mistake to have a `F[RefMap[F, K, V]]` field. You want `RefMap[F, K, V]` field
    * which means the thing that needs it will also have to be inside of `F[_]`, which is because
    * it needs access to mutable state so allocating it is also an effect.
    */
-  def fromConcurrentHashMap[F[_]: Sync, K, V](
+  def ofConcurrentHashMap[F[_]: Sync, K, V](
     initialCapacity: Int = 16,
     loadFactor: Float = 0.75f,
     concurrencyLevel: Int = 16
-  ): F[MapRef[F, K, Option[V]]] =
-    Sync[F].delay(
-      new ConcurrentHashMapImpl[F, K, V](new ConcurrentHashMap[K, V](initialCapacity, loadFactor, concurrencyLevel),
-                        Sync[F]))
+  ): F[MapRef[F, K, Option[V]]] = 
+    inConcurrentHashMap[F, F, K, V](initialCapacity, loadFactor, concurrencyLevel)
 
 
 }

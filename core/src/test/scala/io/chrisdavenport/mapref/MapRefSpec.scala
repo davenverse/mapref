@@ -17,11 +17,11 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
   private def awaitEqual[A: Eq](t: IO[A], success: A): IO[Unit] =
       t.flatMap(a => if (Eq[A].eqv(a, success)) IO.unit else smallDelay *> awaitEqual(t, success))
   
-  "MapRef.fromSingleImmutableMapRef" should {
+  "MapRef.ofSingleImmutableMapRef" should {
 
     "concurrent modifications" in {
       val finalValue = 100
-      val r = MapRef.fromSingleImmutableMapRef[IO, Unit, Int]().unsafeRunSync()
+      val r = MapRef.ofSingleImmutableMap[IO, Unit, Int]().unsafeRunSync()
       val modifies = List.fill(finalValue)(IO.shift *> r(()).update(_.map(_ + 1))).parSequence
       val test = IO.shift *> r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
       test.map(_ => ok)
@@ -29,7 +29,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "getAndSet - successful" in {
       val op = for {
-        r <- MapRef.fromSingleImmutableMapRef[IO, Unit, Int]()
+        r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         getAndSetResult <- r(()).getAndSet(Some(1))
         getResult <- r(()).get
@@ -40,7 +40,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "access - successful" in {
       val op = for {
-        r <- MapRef.fromSingleImmutableMapRef[IO, Unit, Int]()
+        r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         (value, setter) <- r(()).access
         success <- setter(value.map(_ + 1))
@@ -52,7 +52,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "access - setter should fail if value is modified before setter is called with None/Some" in {
       val op = for {
-        r <- MapRef.fromSingleImmutableMapRef[IO, Unit, Int]()
+        r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         (value, setter) <- r(()).access
         _ <- r(()).set(Some(5))
         success <- setter(value.map(_ + 1))
@@ -64,7 +64,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "access - setter should fail if value is modified before setter is called with init Some/Some" in {
       val op = for {
-        r <- MapRef.fromSingleImmutableMapRef[IO, Unit, Int]()
+        r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         (value, setter) <- r(()).access
         _ <- r(()).set(Some(5))
@@ -77,7 +77,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "access - setter should fail if value is modified before setter is called with init Some/None" in {
       val op = for {
-        r <- MapRef.fromSingleImmutableMapRef[IO, Unit, Int]()
+        r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         (value, setter) <- r(()).access
         _ <- r(()).set(Some(5))
@@ -90,7 +90,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "access - setter should fail if called twice" in {
       val op = for {
-        r <- MapRef.fromSingleImmutableMapRef[IO, Unit, Int]()
+        r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         (value, setter)  <- r(()).access
         cond1 <- setter(value.map(_ + 1))
@@ -104,7 +104,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "tryUpdate - modification occurs successfully" in {
       val op = for {
-        r <- MapRef.fromSingleImmutableMapRef[IO, Unit, Int]()
+        r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).tryUpdate(_.map(_+ 1))
         value <- r(()).get
@@ -117,7 +117,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
       val updateRefUnsafely: Ref[IO, Option[Int]] => Unit = _.update(_.map(_ + 1)).unsafeRunSync()
 
       val op = for {
-        r <- MapRef.fromSingleImmutableMapRef[IO, Unit, Int]()
+        r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).tryUpdate(
           currentValue => {
@@ -132,7 +132,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "tryModifyState - modification occurs successfully" in {
       val op = for {
-        r <- MapRef.fromConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).tryModifyState(State.pure(Some(1)))
       } yield result.contains(Some(1))
@@ -142,7 +142,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "modifyState - modification occurs successfully" in {
       val op = for {
-        r <- MapRef.fromConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).modifyState(State.pure(Some(1)))
       } yield result == Some(1)
@@ -151,12 +151,12 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
     }
   }
   
-  "MapRef.fromShardedImmutableMapRef" should {
+  "MapRef.ofShardedImmutableMapRef" should {
     "return an updated value" in {// (shardCount: Int, key: Int) =>
       val size = 10
       val key = 3
       val test = for {
-        map <- MapRef.fromShardedImmutableMapRef[IO, Int, String](size)
+        map <- MapRef.ofShardedImmutableMap[IO, Int, String](size)
         _ <- map(key).set("Foo".some)
         out <- map(key).get
       } yield out
@@ -170,7 +170,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         val key = 3
         val expect = "Foo"
         val test = for {
-          map <- MapRef.fromShardedImmutableMapRef[IO, Int, String](size)
+          map <- MapRef.ofShardedImmutableMap[IO, Int, String](size)
           _ <- map.setKeyValue(key, expect)
           out <- map(key).get
         } yield out
@@ -179,10 +179,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
     }
   }
 
-  "MapRef.fromConcurrentHashMap" should {
+  "MapRef.ofConcurrentHashMap" should {
     "concurrent modifications" in {
       val finalValue = 100
-      val r = MapRef.fromConcurrentHashMap[IO, Unit, Int]().unsafeRunSync()
+      val r = MapRef.ofConcurrentHashMap[IO, Unit, Int]().unsafeRunSync()
       val modifies = List.fill(finalValue)(IO.shift *> r(()).update(_.map(_ + 1))).parSequence
       val test = IO.shift *> r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
       test.map(_ => ok)
@@ -190,7 +190,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "getAndSet - successful" in {
       val op = for {
-        r <- MapRef.fromConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         getAndSetResult <- r(()).getAndSet(Some(1))
         getResult <- r(()).get
@@ -201,7 +201,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "access - successful" in {
       val op = for {
-        r <- MapRef.fromConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         (value, setter) <- r(()).access
         success <- setter(value.map(_ + 1))
@@ -213,7 +213,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "access - setter should fail if value is modified before setter is called with None/Some" in {
       val op = for {
-        r <- MapRef.fromConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         (value, setter) <- r(()).access
         _ <- r(()).set(Some(5))
         success <- setter(value.map(_ + 1))
@@ -225,7 +225,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "access - setter should fail if value is modified before setter is called with init Some/Some" in {
       val op = for {
-        r <- MapRef.fromConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         (value, setter) <- r(()).access
         _ <- r(()).set(Some(5))
@@ -238,7 +238,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "access - setter should fail if value is modified before setter is called with init Some/None" in {
       val op = for {
-        r <- MapRef.fromConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         (value, setter) <- r(()).access
         _ <- r(()).set(Some(5))
@@ -251,7 +251,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "access - setter should fail if called twice" in {
       val op = for {
-        r <- MapRef.fromConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         (value, setter)  <- r(()).access
         cond1 <- setter(value.map(_ + 1))
@@ -265,7 +265,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "tryUpdate - modification occurs successfully" in {
       val op = for {
-        r <- MapRef.fromConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).tryUpdate(_.map(_+ 1))
         value <- r(()).get
@@ -278,7 +278,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
       val updateRefUnsafely: Ref[IO, Option[Int]] => Unit = _.update(_.map(_ + 1)).unsafeRunSync()
 
       val op = for {
-        r <- MapRef.fromConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).tryUpdate(
           currentValue => {
@@ -293,7 +293,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "tryModifyState - modification occurs successfully" in {
       val op = for {
-        r <- MapRef.fromConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).tryModifyState(State.pure(Some(1)))
       } yield result.contains(Some(1))
@@ -303,7 +303,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "modifyState - modification occurs successfully" in {
       val op = for {
-        r <- MapRef.fromConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).modifyState(State.pure(Some(1)))
       } yield result == Some(1)

@@ -18,7 +18,6 @@ trait MapRef[F[_], K, V] {
   def apply(k: K): Ref[F, V]
 }
 
-
 object MapRef  {
 
   private class SimpleMapRef[F[_], K, V](f: K => Ref[F, V]) extends MapRef[F, K, V]{
@@ -172,10 +171,16 @@ object MapRef  {
   /**
    * Heavy Contention on Use
    */
-  def fromSingleImmutableMapRef[F[_]: Sync, K, V](map: Map[K, V] = Map.empty[K, V]): F[MapRef[F, K, Option[V]]] = 
+  def fromSingleImmutableMap[F[_]: Sync, K, V](map: Map[K, V] = Map.empty[K, V]): F[MapRef[F, K, Option[V]]] = 
     Ref.of[F, Map[K, V]](map)
-      .map(m => new ShardedImmutableMapImpl[F, K, V](_ => m))
-  
+      .map(fromSingleImmutableMapRef[F, K, V])
+
+  /**
+   * Heavy Contention on Use, Allows you to access the underlying map through
+   * processes outside of this interface. Useful for Atomic Map[K, V] => Map[K, V] interactions.
+   **/
+  def fromSingleImmutableMapRef[F[_]: Sync, K, V](ref: Ref[F, Map[K, V]]): MapRef[F, K, Option[V]] = 
+    new ShardedImmutableMapImpl[F, K, V](_ => ref)
 
   private class ConcurrentHashMapImpl[F[_], K, V](chm: ConcurrentHashMap[K, V], sync: Sync[F])
     extends MapRef[F, K, Option[V]] {

@@ -24,6 +24,7 @@ lazy val contributors = Seq(
 
 val catsV = "2.0.0"
 val catsEffectV = "2.0.0"
+val catsEffectTestV = "0.3.0"
 
 val specs2V = "4.7.0"
 
@@ -34,7 +35,7 @@ val betterMonadicForV = "0.3.1"
 lazy val commonSettings = Seq(
   organization := "io.chrisdavenport",
 
-  scalaVersion := "2.13.0",
+  scalaVersion := "2.13.1",
   crossScalaVersions := Seq(scalaVersion.value, "2.12.10"),
 
   scalacOptions in (Compile, doc) ++= Seq(
@@ -49,7 +50,7 @@ lazy val commonSettings = Seq(
     "org.typelevel"               %% "cats-core"                  % catsV,
     "org.typelevel"               %% "cats-effect"                % catsEffectV,
 
-
+    "com.codecommit" %% "cats-effect-testing-specs2"              % catsEffectTestV % Test,
     "org.specs2"                  %% "specs2-core"                % specs2V       % Test,
     "org.specs2"                  %% "specs2-scalacheck"          % specs2V       % Test
   )

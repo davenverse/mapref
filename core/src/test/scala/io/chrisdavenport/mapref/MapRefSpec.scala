@@ -163,6 +163,20 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
       test.map(_ must_=== Some("Foo"))
     }
+
+    "work with convenience ops" in {
+        import io.chrisdavenport.mapref.implicits._
+        val size = 10
+        val key = 3
+        val expect = "Foo"
+        val test = for {
+          map <- MapRef.fromShardedImmutableMapRef[IO, Int, String](size)
+          _ <- map.setKeyValue(key, expect)
+          out <- map(key).get
+        } yield out
+
+        test.map(_ must_=== Some(expect))
+    }
   }
 
   "MapRef.fromConcurrentHashMap" should {

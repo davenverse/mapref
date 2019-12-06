@@ -47,7 +47,7 @@ object MapRef  {
             .ifM(f(opt), Applicative[F].pure(false))
         }
         current.get(k) match {
-          case n@None =>
+          case None =>
             val set: Option[V] => F[Boolean] = { opt: Option[V] =>
               opt match {
                 case None => thisRef.get.map(!_.isDefinedAt(k))
@@ -58,7 +58,7 @@ object MapRef  {
                     )
               }
             }
-            (n, set)
+            (None, set)
           case s@Some(_) => 
             val set: Option[V] => F[Boolean] = { opt => 
               opt match {

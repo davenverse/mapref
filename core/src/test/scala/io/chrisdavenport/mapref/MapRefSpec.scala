@@ -132,7 +132,7 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "tryModifyState - modification occurs successfully" in {
       val op = for {
-        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).tryModifyState(State.pure(Some(1)))
       } yield result.contains(Some(1))
@@ -142,12 +142,31 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
 
     "modifyState - modification occurs successfully" in {
       val op = for {
-        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
+        r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).modifyState(State.pure(Some(1)))
       } yield result == Some(1)
 
       op.map(_ must_=== true)
+    }
+
+    "Keys - empty" in {
+      val op = for {
+        r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
+        result <- r.keys
+      } yield result
+
+      op.map(_ must_=== Nil)
+    }
+
+    "keys - present" in {
+      val op = for {
+        r <- MapRef.ofSingleImmutableMap[IO, Int, Int]()
+        _ <- r(1).set(Some(1))
+        result <- r.keys
+      } yield result
+
+      op.map(_ must_=== List(1))
     }
   }
   
@@ -176,6 +195,26 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         } yield out
 
         test.map(_ must_=== Some(expect))
+    }
+
+    "Keys - empty" in {
+      val op = for {
+        r <- MapRef.ofShardedImmutableMap[IO, Unit, Int](10)
+        result <- r.keys
+      } yield result
+
+      op.map(_ must_=== Nil)
+    }
+
+    "keys - present" in {
+      val op = for {
+        r <- MapRef.ofShardedImmutableMap[IO, Int, Int](10)
+        _ <- r(1).set(Some(1))
+        _ <- r(2).set(Some(2))
+        result <- r.keys
+      } yield result
+
+      op.map(_ must_=== List(1,2))
     }
   }
 
@@ -309,6 +348,25 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
       } yield result == Some(1)
 
       op.map(_ must_=== true)
+    }
+
+    "Keys - empty" in {
+      val op = for {
+        r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
+        result <- r.keys
+      } yield result
+
+      op.map(_ must_=== Nil)
+    }
+
+    "keys - present" in {
+      val op = for {
+        r <- MapRef.ofConcurrentHashMap[IO, Int, Int]()
+        _ <- r(1).set(Some(1))
+        result <- r.keys
+      } yield result
+
+      op.map(_ must_=== List(1))
     }
 
 

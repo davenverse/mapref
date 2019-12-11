@@ -7,6 +7,7 @@ import cats.effect.Sync
 import cats.effect.concurrent.Ref
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import scala.collection.mutable
 
 /**
  * This is a total Map from K to Ref[F, V].
@@ -15,23 +16,25 @@ import java.util.concurrent.atomic.AtomicBoolean
  * This uses java universal hashCode and equality on K
  */
 trait MapRef[F[_], K, V] {
+  /**
+   * Access the reference for this Key
+   */
   def apply(k: K): Ref[F, V]
+
+  /** 
+   * Snapshot of keys, may be concurrently updated after this snapshot
+   * Experimental: Original interface was only apply, currently all
+   * backends can implement this smoothly and its useful for operations you
+   * need to do things to all the References.
+   **/
+  def keys: F[List[K]]
 }
 
 object MapRef  {
 
-  private class SimpleMapRef[F[_], K, V](f: K => Ref[F, V]) extends MapRef[F, K, V]{
-    def apply(k: K): Ref[F, V] = f(k)
-  }
-
-  /**
-   * Ease of Use Constructor to Access MapRef
-   **/
-  def simple[F[_], K, V](f: K => Ref[F, V]): MapRef[F, K, V] = 
-    new SimpleMapRef[F, K, V](f)
-
   private class ShardedImmutableMapImpl[F[_]: Sync, K, V](
-    ref: K => Ref[F, Map[K, V]]
+    ref: K => Ref[F, Map[K, V]],
+    val keys: F[List[K]]
   ) extends MapRef[F, K, Option[V]]{
     class HandleRef(k: K) extends Ref[F, Option[V]] {
 
@@ -174,7 +177,8 @@ object MapRef  {
           val location = Math.abs(k.## % shardCount)
           array(location)
         }
-        new ShardedImmutableMapImpl[F, K, V](refFunction)
+        val keys = array.toList.traverse(ref => ref.get.map(_.keys.toList)).map(_.flatten)
+        new ShardedImmutableMapImpl[F, K, V](refFunction, keys)
       }
   }
 
@@ -196,7 +200,7 @@ object MapRef  {
    * processes outside of this interface. Useful for Atomic Map[K, V] => Map[K, V] interactions.
    **/
   def fromSingleImmutableMapRef[F[_]: Sync, K, V](ref: Ref[F, Map[K, V]]): MapRef[F, K, Option[V]] = 
-    new ShardedImmutableMapImpl[F, K, V](_ => ref)
+    new ShardedImmutableMapImpl[F, K, V](_ => ref, ref.get.map(_.keys.toList))
 
   private class ConcurrentHashMapImpl[F[_], K, V](chm: ConcurrentHashMap[K, V], sync: Sync[F])
     extends MapRef[F, K, Option[V]] {
@@ -307,6 +311,18 @@ object MapRef  {
         }
         loop
       }
+    }
+
+    val keys: F[List[K]] = sync.delay{
+      val k = chm.keys()
+      val builder = new mutable.ListBuffer[K]
+      if (k != null){
+        while (k.hasMoreElements()){
+          val next = k.nextElement()
+          builder.+=(next)
+        }
+      }
+      builder.result()
     }
 
     def apply(k: K): Ref[F, Option[V]] = new HandleRef(k)

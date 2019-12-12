@@ -85,7 +85,7 @@ object MapRef  {
         }
       }
 
-      def get: F[Option[V]] = ref(k).modify(m => (m, m.get(k)))
+      def get: F[Option[V]] = ref(k).get.map(_.get(k))
 
       def getAndSet(a: Option[V]): F[Option[V]] = 
         a match {

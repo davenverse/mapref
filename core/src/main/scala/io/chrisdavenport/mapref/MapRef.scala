@@ -15,7 +15,7 @@ import scala.collection.mutable
  *
  * This uses java universal hashCode and equality on K
  */
-trait MapRef[F[_], K, V] {
+trait MapRef[F[_], K, V] extends Function1[K, Ref[F, V]]{
   /**
    * Access the reference for this Key
    */

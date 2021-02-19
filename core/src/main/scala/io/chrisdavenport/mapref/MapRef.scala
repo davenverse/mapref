@@ -1,10 +1,9 @@
 package io.chrisdavenport.mapref
 
 import cats._
-import cats.implicits._
+import cats.syntax.all._
 import cats.data._
-import cats.effect.Sync
-import cats.effect.concurrent.Ref
+import cats.effect.{Ref, Sync}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
@@ -167,7 +166,7 @@ object MapRef  {
    */
   def inShardedImmutableMap[G[_]: Sync, F[_]: Sync, K, V](
     shardCount: Int
-  ): G[MapRef[F, K, Option[V]]] = Sync[G].suspend{
+  ): G[MapRef[F, K, Option[V]]] = Sync[G].suspend(Sync.Type.Delay) {
     assert(shardCount >= 1, "MapRef.sharded should have at least 1 shard")
     List.fill(shardCount)(())
       .traverse(_ => Ref.in[G, F, Map[K, V]](Map.empty))
@@ -272,7 +271,7 @@ object MapRef  {
 
       def tryModify[B](f: Option[V] => (Option[V], B)): F[Option[B]] =
         // we need the suspend because we do effects inside
-        sync.suspend {
+        sync.suspend(Sync.Type.Delay) {
           val init = chm.get(k)
           if (init == null) {
             f(None) match {

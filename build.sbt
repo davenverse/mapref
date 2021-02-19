@@ -52,9 +52,9 @@ lazy val site = project.in(file("site"))
     )
   }
 
-val catsV = "2.0.0"
-val catsEffectV = "2.0.0"
-val catsEffectTestV = "0.3.0"
+val catsV = "2.4.0"
+val catsEffectV = "3.0.0-RC1"
+val catsEffectTestV = "1.0.0-M1"
 
 val specs2V = "4.8.1"
 
@@ -63,7 +63,7 @@ val betterMonadicForV = "0.3.1"
 
 // General Settings
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.1",
+  scalaVersion := "2.13.4",
   crossScalaVersions := Seq(scalaVersion.value, "2.12.10"),
 
   addCompilerPlugin("org.typelevel" % "kind-projector" % kindProjectorV cross CrossVersion.binary),

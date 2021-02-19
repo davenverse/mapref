@@ -1,6 +1,6 @@
 package io.chrisdavenport.mapref
 
-import cats.implicits._
+import cats.syntax.all._
 
 object implicits {
   implicit class MapRefOptionSyntax[F[_], K, V](private val mRef: MapRef[F, K, Option[V]]){

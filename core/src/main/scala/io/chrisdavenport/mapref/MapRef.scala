@@ -87,7 +87,7 @@ object MapRef  {
 
       def get: F[Option[V]] = ref(k).get.map(_.get(k))
 
-      def getAndSet(a: Option[V]): F[Option[V]] = 
+      override def getAndSet(a: Option[V]): F[Option[V]] = 
         a match {
           case None => ref(k).modify(map => 
             (map -k, map.get(k))
@@ -245,7 +245,7 @@ object MapRef  {
           Option(chm.get(k))
         }
 
-      def getAndSet(a: Option[V]): F[Option[V]] =
+      override def getAndSet(a: Option[V]): F[Option[V]] =
         a match {
           case None =>
             sync.delay(Option(chm.remove(k)))
@@ -410,7 +410,7 @@ object MapRef  {
           map.get(k)
         }
 
-      def getAndSet(a: Option[V]): F[Option[V]] =
+      override def getAndSet(a: Option[V]): F[Option[V]] =
         a match {
           case None =>
             sync.delay(map.remove(k))

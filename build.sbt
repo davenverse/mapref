@@ -56,8 +56,6 @@ val catsV = "2.0.0"
 val catsEffectV = "2.0.0"
 val munitCatsEffectV = "0.13.1"
 
-val specs2V = "4.8.1"
-
 val kindProjectorV = "0.10.3"
 val betterMonadicForV = "0.3.1"
 
@@ -72,7 +70,6 @@ lazy val commonSettings = Seq(
   libraryDependencies ++= Seq(
     "org.typelevel"               %% "cats-core"                  % catsV,
     "org.typelevel"               %% "cats-effect"                % catsEffectV,
-    "org.scalameta"               %% "munit-scalacheck"           % "0.7.22"          % Test,
     "org.typelevel"               %%% "munit-cats-effect-2"       % munitCatsEffectV  % Test,
   )
 )

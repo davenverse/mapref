@@ -1,33 +1,27 @@
 package io.chrisdavenport.mapref
 
-import org.specs2.mutable.Specification
-import org.specs2.ScalaCheck
-
 import cats._
 import cats.implicits._
 import cats.data.State
-import cats.effect._
-import cats.effect.concurrent.Ref
+import cats.effect.kernel.Ref
+import cats.effect.IO
 
-import cats.effect.specs2.CatsIO
 import scala.concurrent.duration._
 
-class MapRefSpec extends Specification with ScalaCheck with CatsIO {
-  private val smallDelay: IO[Unit] = Timer[IO].sleep(20.millis)
+class MapRefSpec extends munit.CatsEffectSuite {
+  private val smallDelay: IO[Unit] = IO.sleep(20.millis)
   private def awaitEqual[A: Eq](t: IO[A], success: A): IO[Unit] =
       t.flatMap(a => if (Eq[A].eqv(a, success)) IO.unit else smallDelay *> awaitEqual(t, success))
   
-  "MapRef.ofSingleImmutableMapRef" should {
-
-    "concurrent modifications" in {
+    test("MapRef.ofSingleImmutableMapRef - concurrent modifications") {
       val finalValue = 100
       val r = MapRef.ofSingleImmutableMap[IO, Unit, Int]().unsafeRunSync()
-      val modifies = List.fill(finalValue)(IO.shift *> r(()).update(_.map(_ + 1))).parSequence
-      val test = IO.shift *> r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
-      test.map(_ => ok)
+      val modifies = List.fill(finalValue)(r(()).update(_.map(_ + 1))).parSequence
+      val test = r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
+      test.map(_ => assert(true))
     }
 
-    "getAndSet - successful" in {
+    test("MapRef.ofSingleImmutableMapRef - getAndSet - successful") {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
@@ -35,10 +29,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         getResult <- r(()).get
       } yield getAndSetResult == Some(0) && getResult == Some(1)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - successful" in {
+    test("MapRef.ofSingleImmutableMapRef - access - successful") {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
@@ -47,10 +41,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield success && result == Some(1)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - setter should fail if value is modified before setter is called with None/Some" in {
+    test("MapRef.ofSingleImmutableMapRef - access - setter should fail if value is modified before setter is called with None/Some") {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         (value, setter) <- r(()).access
@@ -59,10 +53,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield !success && result == Some(5)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - setter should fail if value is modified before setter is called with init Some/Some" in {
+    test("MapRef.ofSingleImmutableMapRef - access - setter should fail if value is modified before setter is called with init Some/Some") {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
@@ -72,10 +66,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield !success && result == Some(5)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - setter should fail if value is modified before setter is called with init Some/None" in {
+    test("MapRef.ofSingleImmutableMapRef - access - setter should fail if value is modified before setter is called with init Some/None") {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
@@ -85,10 +79,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield !success && result == Some(5)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - setter should fail if called twice" in {
+    test("MapRef.ofSingleImmutableMapRef - access - setter should fail if called twice") {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
@@ -99,10 +93,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield cond1 && !cond2 && result == Some(0)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "tryUpdate - modification occurs successfully" in {
+    test("MapRef.ofSingleImmutableMapRef - tryUpdate - modification occurs successfully") {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
@@ -110,10 +104,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         value <- r(()).get
       } yield result && value == Some(1)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "tryUpdate - should fail to update if modification has occurred" in {
+    test("MapRef.ofSingleImmutableMapRef - tryUpdate - should fail to update if modification has occurred") {
       val updateRefUnsafely: Ref[IO, Option[Int]] => Unit = _.update(_.map(_ + 1)).unsafeRunSync()
 
       val op = for {
@@ -127,51 +121,49 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         )
       } yield result
 
-      op.map(_ should_=== false)
+      op.map(a => assert(a === false))
     }
 
-    "tryModifyState - modification occurs successfully" in {
+    test("MapRef.ofSingleImmutableMapRef - tryModifyState - modification occurs successfully") {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).tryModifyState(State.pure(Some(1)))
       } yield result.contains(Some(1))
 
-      op.map(_ should_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "modifyState - modification occurs successfully" in {
+    test("MapRef.ofSingleImmutableMapRef - modifyState - modification occurs successfully") {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).modifyState(State.pure(Some(1)))
       } yield result == Some(1)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "Keys - empty" in {
+    test("MapRef.ofSingleImmutableMapRef - Keys - empty") {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         result <- r.keys
       } yield result
 
-      op.map(_ must_=== Nil)
+      op.map(a => assert(a === Nil))
     }
 
-    "keys - present" in {
+    test("MapRef.ofSingleImmutableMapRef - keys - present") {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Int, Int]()
         _ <- r(1).set(Some(1))
         result <- r.keys
       } yield result
 
-      op.map(_ must_=== List(1))
+      op.map(a => assert(a === List(1)))
     }
-  }
-  
-  "MapRef.ofShardedImmutableMapRef" should {
-    "return an updated value" in {// (shardCount: Int, key: Int) =>
+
+    test("MapRef.ofShardedImmutableMapRef - return an updated value") {
       val size = 10
       val key = 3
       val test = for {
@@ -180,10 +172,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         out <- map(key).get
       } yield out
 
-      test.map(_ must_=== Some("Foo"))
+      test.map(a => assert(a === Some("Foo")))
     }
 
-    "work with convenience ops" in {
+    test("MapRef.ofShardedImmutableMapRef - work with convenience ops") {
         import io.chrisdavenport.mapref.implicits._
         val size = 10
         val key = 3
@@ -194,19 +186,19 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
           out <- map(key).get
         } yield out
 
-        test.map(_ must_=== Some(expect))
+        test.map(a => assert(a === Some(expect)))
     }
 
-    "Keys - empty" in {
+    test("MapRef.ofShardedImmutableMapRef - Keys - empty") {
       val op = for {
         r <- MapRef.ofShardedImmutableMap[IO, Unit, Int](10)
         result <- r.keys
       } yield result
 
-      op.map(_ must_=== Nil)
+      op.map(a => assert(a === Nil))
     }
 
-    "keys - present" in {
+    test("MapRef.ofShardedImmutableMapRef - keys - present") {
       val op = for {
         r <- MapRef.ofShardedImmutableMap[IO, Int, Int](10)
         _ <- r(1).set(Some(1))
@@ -214,20 +206,18 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r.keys
       } yield result
 
-      op.map(_ must_=== List(1,2))
+      op.map(a => assert(a === List(1,2)))
     }
-  }
 
-  "MapRef.ofConcurrentHashMap" should {
-    "concurrent modifications" in {
+    test("MapRef.ofConcurrentHashMap - concurrent modifications") {
       val finalValue = 100
       val r = MapRef.ofConcurrentHashMap[IO, Unit, Int]().unsafeRunSync()
-      val modifies = List.fill(finalValue)(IO.shift *> r(()).update(_.map(_ + 1))).parSequence
-      val test = IO.shift *> r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
-      test.map(_ => ok)
+      val modifies = List.fill(finalValue)(r(()).update(_.map(_ + 1))).parSequence
+      val test = r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
+      test.map(_ => assert(true))
     }
 
-    "getAndSet - successful" in {
+    test("MapRef.ofConcurrentHashMap - getAndSet - successful") {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
@@ -235,10 +225,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         getResult <- r(()).get
       } yield getAndSetResult == Some(0) && getResult == Some(1)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - successful" in {
+    test("MapRef.ofConcurrentHashMap - access - successful") {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
@@ -247,10 +237,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield success && result == Some(1)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - setter should fail if value is modified before setter is called with None/Some" in {
+    test("MapRef.ofConcurrentHashMap - access - setter should fail if value is modified before setter is called with None/Some") {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         (value, setter) <- r(()).access
@@ -259,10 +249,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield !success && result == Some(5)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - setter should fail if value is modified before setter is called with init Some/Some" in {
+    test("MapRef.ofConcurrentHashMap - access - setter should fail if value is modified before setter is called with init Some/Some") {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
@@ -272,10 +262,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield !success && result == Some(5)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - setter should fail if value is modified before setter is called with init Some/None" in {
+    test("MapRef.ofConcurrentHashMap - access - setter should fail if value is modified before setter is called with init Some/None") {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
@@ -285,10 +275,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield !success && result == Some(5)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - setter should fail if called twice" in {
+    test("MapRef.ofConcurrentHashMap - access - setter should fail if called twice") {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
@@ -299,10 +289,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield cond1 && !cond2 && result == Some(0)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "tryUpdate - modification occurs successfully" in {
+    test("MapRef.ofConcurrentHashMap - tryUpdate - modification occurs successfully") {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
@@ -310,10 +300,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         value <- r(()).get
       } yield result && value == Some(1)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "tryUpdate - should fail to update if modification has occurred" in {
+    test("MapRef.ofConcurrentHashMap - tryUpdate - should fail to update if modification has occurred") {
       val updateRefUnsafely: Ref[IO, Option[Int]] => Unit = _.update(_.map(_ + 1)).unsafeRunSync()
 
       val op = for {
@@ -327,62 +317,57 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         )
       } yield result
 
-      op.map(_ should_=== false)
+      op.map(a => assert(a === false))
     }
 
-    "tryModifyState - modification occurs successfully" in {
+    test("MapRef.ofConcurrentHashMap - tryModifyState - modification occurs successfully") {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).tryModifyState(State.pure(Some(1)))
       } yield result.contains(Some(1))
 
-      op.map(_ should_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "modifyState - modification occurs successfully" in {
+    test("MapRef.ofConcurrentHashMap - modifyState - modification occurs successfully") {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
         result <- r(()).modifyState(State.pure(Some(1)))
       } yield result == Some(1)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "Keys - empty" in {
+    test("MapRef.ofConcurrentHashMap - Keys - empty") {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         result <- r.keys
       } yield result
 
-      op.map(_ must_=== Nil)
+      op.map(a => assert(a === Nil))
     }
 
-    "keys - present" in {
+    test("MapRef.ofConcurrentHashMap - keys - present") {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Int, Int]()
         _ <- r(1).set(Some(1))
         result <- r.keys
       } yield result
 
-      op.map(_ must_=== List(1))
+      op.map(a => assert(a === List(1)))
     }
 
-
-  }
-
-  "MapRef.ofScalaConcurrentTrieMap" should {
-
-    "concurrent modifications" in {
+    test("MapRef.ofScalaConcurrentTrieMap - concurrent modifications") {
       val finalValue = 100
       val r = MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int].unsafeRunSync()
-      val modifies = List.fill(finalValue)(IO.shift *> r(()).update(_.map(_ + 1))).parSequence
-      val test = IO.shift *> r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
-      test.map(_ => ok)
+      val modifies = List.fill(finalValue)(r(()).update(_.map(_ + 1))).parSequence
+      val test = r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
+      test.map(_ => assert(true))
     }
 
-    "getAndSet - successful" in {
+    test("MapRef.ofScalaConcurrentTrieMap - getAndSet - successful") {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         _ <- r(()).set(Some(0))
@@ -390,10 +375,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         getResult <- r(()).get
       } yield getAndSetResult == Some(0) && getResult == Some(1)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - successful" in {
+    test("MapRef.ofScalaConcurrentTrieMap - access - successful" ) {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         _ <- r(()).set(Some(0))
@@ -402,10 +387,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield success && result == Some(1)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - setter should fail if value is modified before setter is called with None/Some" in {
+    test("MapRef.ofScalaConcurrentTrieMap - access - setter should fail if value is modified before setter is called with None/Some" ) {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         (value, setter) <- r(()).access
@@ -414,10 +399,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield !success && result == Some(5)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - setter should fail if value is modified before setter is called with init Some/Some" in {
+    test("MapRef.ofScalaConcurrentTrieMap - access - setter should fail if value is modified before setter is called with init Some/Some" ) {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         _ <- r(()).set(Some(0))
@@ -427,10 +412,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield !success && result == Some(5)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - setter should fail if value is modified before setter is called with init Some/None" in {
+    test("MapRef.ofScalaConcurrentTrieMap - access - setter should fail if value is modified before setter is called with init Some/None" ) {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         _ <- r(()).set(Some(0))
@@ -440,10 +425,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield !success && result == Some(5)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "access - setter should fail if called twice" in {
+    test("MapRef.ofScalaConcurrentTrieMap - access - setter should fail if called twice" ) {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         _ <- r(()).set(Some(0))
@@ -454,10 +439,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         result <- r(()).get
       } yield cond1 && !cond2 && result == Some(0)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "tryUpdate - modification occurs successfully" in {
+    test("MapRef.ofScalaConcurrentTrieMap - tryUpdate - modification occurs successfully" ) {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         _ <- r(()).set(Some(0))
@@ -465,10 +450,10 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         value <- r(()).get
       } yield result && value == Some(1)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "tryUpdate - should fail to update if modification has occurred" in {
+    test("MapRef.ofScalaConcurrentTrieMap - tryUpdate - should fail to update if modification has occurred" ) {
       val updateRefUnsafely: Ref[IO, Option[Int]] => Unit = _.update(_.map(_ + 1)).unsafeRunSync()
 
       val op = for {
@@ -482,47 +467,46 @@ class MapRefSpec extends Specification with ScalaCheck with CatsIO {
         )
       } yield result
 
-      op.map(_ should_=== false)
+      op.map(a => assert(a === false))
     }
 
-    "tryModifyState - modification occurs successfully" in {
+    test("MapRef.ofScalaConcurrentTrieMap - tryModifyState - modification occurs successfully" ) {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         _ <- r(()).set(Some(0))
         result <- r(()).tryModifyState(State.pure(Some(1)))
       } yield result.contains(Some(1))
 
-      op.map(_ should_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "modifyState - modification occurs successfully" in {
+    test("MapRef.ofScalaConcurrentTrieMap - modifyState - modification occurs successfully" ) {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         _ <- r(()).set(Some(0))
         result <- r(()).modifyState(State.pure(Some(1)))
       } yield result == Some(1)
 
-      op.map(_ must_=== true)
+      op.map(a => assert(a === true))
     }
 
-    "Keys - empty" in {
+    test("MapRef.ofScalaConcurrentTrieMap - Keys - empty") {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         result <- r.keys
       } yield result
 
-      op.map(_ must_=== Nil)
+      op.map(a => assert(a === Nil))
     }
 
-    "keys - present" in {
+    test("MapRef.ofScalaConcurrentTrieMap - keys - present") {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Int, Int]
         _ <- r(1).set(Some(1))
         result <- r.keys
       } yield result
 
-      op.map(_ must_=== List(1))
+      op.map(a => assert(a === List(1)))
     }
-  }
 
-}
+  }

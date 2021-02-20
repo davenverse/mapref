@@ -3,7 +3,7 @@ package io.chrisdavenport.mapref
 import cats._
 import cats.syntax.all._
 import cats.data._
-import cats.effect.{Ref, Sync}
+import cats.effect.kernel.{Ref, Sync}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
@@ -86,7 +86,7 @@ object MapRef  {
 
       def get: F[Option[V]] = ref(k).get.map(_.get(k))
 
-      def getAndSet(a: Option[V]): F[Option[V]] = 
+      override def getAndSet(a: Option[V]): F[Option[V]] = 
         a match {
           case None => ref(k).modify(map => 
             (map -k, map.get(k))
@@ -166,12 +166,12 @@ object MapRef  {
    */
   def inShardedImmutableMap[G[_]: Sync, F[_]: Sync, K, V](
     shardCount: Int
-  ): G[MapRef[F, K, Option[V]]] = Sync[G].suspend(Sync.Type.Delay) {
+  ): G[MapRef[F, K, Option[V]]] = Sync[G].defer {
     assert(shardCount >= 1, "MapRef.sharded should have at least 1 shard")
     List.fill(shardCount)(())
       .traverse(_ => Ref.in[G, F, Map[K, V]](Map.empty))
       .map(_.toArray)
-      .map{array => 
+      .map{ array => 
         val refFunction = {k: K => 
           val location = Math.abs(k.## % shardCount)
           array(location)
@@ -244,7 +244,7 @@ object MapRef  {
           Option(chm.get(k))
         }
 
-      def getAndSet(a: Option[V]): F[Option[V]] =
+      override def getAndSet(a: Option[V]): F[Option[V]] =
         a match {
           case None =>
             sync.delay(Option(chm.remove(k)))
@@ -271,7 +271,7 @@ object MapRef  {
 
       def tryModify[B](f: Option[V] => (Option[V], B)): F[Option[B]] =
         // we need the suspend because we do effects inside
-        sync.suspend(Sync.Type.Delay) {
+        sync.defer {
           val init = chm.get(k)
           if (init == null) {
             f(None) match {
@@ -409,7 +409,7 @@ object MapRef  {
           map.get(k)
         }
 
-      def getAndSet(a: Option[V]): F[Option[V]] =
+      override def getAndSet(a: Option[V]): F[Option[V]] =
         a match {
           case None =>
             sync.delay(map.remove(k))
@@ -435,7 +435,7 @@ object MapRef  {
         }
 
         def tryModify[B](f: Option[V] => (Option[V], B)): F[Option[B]] = // we need the suspend because we do effects inside
-          sync.suspend {
+          sync.defer {
             val init = map.get(k)
             init match {
               case None => 

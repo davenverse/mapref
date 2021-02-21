@@ -30,7 +30,7 @@ ThisBuild / githubWorkflowBuild := Seq(
   WorkflowStep.Sbt(List("test", "mimaReportBinaryIssues")),
 
   WorkflowStep.Sbt(
-    List("docs/makeMicrosite"),
+    List("site/makeMicrosite"),
     cond = Some(Scala213Cond)))
 
 ThisBuild / githubWorkflowTargetTags ++= Seq("v*")
@@ -121,8 +121,6 @@ val betterMonadicForV = "0.3.1"
 
 // General Settings
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.1",
-  crossScalaVersions := Seq(scalaVersion.value, "2.12.10"),
 
   addCompilerPlugin("org.typelevel" % "kind-projector" % kindProjectorV cross CrossVersion.binary),
   addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % betterMonadicForV),

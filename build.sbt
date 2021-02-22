@@ -1,5 +1,63 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
+val Scala213 = "2.13.1"
+
+ThisBuild / crossScalaVersions := Seq("2.12.13", Scala213)
+ThisBuild / scalaVersion := crossScalaVersions.value.last
+
+ThisBuild / githubWorkflowArtifactUpload := false
+
+val Scala213Cond = s"matrix.scala == '$Scala213'"
+
+def rubySetupSteps(cond: Option[String]) = Seq(
+  WorkflowStep.Use(
+    UseRef.Public("ruby", "setup-ruby", "v1"),
+    name = Some("Setup Ruby"),
+    params = Map("ruby-version" -> "2.6.0"),
+    cond = cond),
+
+  WorkflowStep.Run(
+    List(
+      "gem install saas",
+      "gem install jekyll -v 3.2.1"),
+    name = Some("Install microsite dependencies"),
+    cond = cond))
+
+ThisBuild / githubWorkflowBuildPreamble ++=
+  rubySetupSteps(Some(Scala213Cond))
+
+ThisBuild / githubWorkflowBuild := Seq(
+  WorkflowStep.Sbt(List("test", "mimaReportBinaryIssues")),
+
+  WorkflowStep.Sbt(
+    List("site/makeMicrosite"),
+    cond = Some(Scala213Cond)))
+
+ThisBuild / githubWorkflowTargetTags ++= Seq("v*")
+
+// currently only publishing tags
+ThisBuild / githubWorkflowPublishTargetBranches :=
+  Seq(RefPredicate.StartsWith(Ref.Tag("v")))
+
+ThisBuild / githubWorkflowPublishPreamble ++=
+  WorkflowStep.Use(UseRef.Public("olafurpg", "setup-gpg", "v3")) +: rubySetupSteps(None)
+
+ThisBuild / githubWorkflowPublish := Seq(
+  WorkflowStep.Sbt(
+    List("ci-release"),
+    name = Some("Publish artifacts to Sonatype"),
+    env = Map(
+      "PGP_PASSPHRASE" -> "${{ secrets.PGP_PASSPHRASE }}",
+      "PGP_SECRET" -> "${{ secrets.PGP_SECRET }}",
+      "SONATYPE_PASSWORD" -> "${{ secrets.SONATYPE_PASSWORD }}",
+      "SONATYPE_USERNAME" -> "${{ secrets.SONATYPE_USERNAME }}")),
+
+  WorkflowStep.Sbt(
+    List(s"++$Scala213", "docs/publishMicrosite"),
+    name = Some("Publish microsite")
+  )
+)
+
 lazy val `mapref` = project.in(file("."))
   .disablePlugins(MimaPlugin)
   .settings(commonSettings)
@@ -61,8 +119,6 @@ val betterMonadicForV = "0.3.1"
 
 // General Settings
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.4",
-  crossScalaVersions := Seq(scalaVersion.value, "2.12.10"),
   testFrameworks += new TestFramework("munit.Framework"),
 
   addCompilerPlugin("org.typelevel" % "kind-projector" % kindProjectorV cross CrossVersion.binary),

@@ -3,21 +3,21 @@ package io.chrisdavenport.mapref
 import cats._
 import cats.implicits._
 import cats.data.State
-import cats.effect._
-import cats.effect.concurrent.Ref
+import cats.effect.kernel.Ref
+import cats.effect.IO
 
 import scala.concurrent.duration._
 
 class MapRefSpec extends munit.CatsEffectSuite {
-  private val smallDelay: IO[Unit] = Timer[IO].sleep(20.millis)
+  private val smallDelay: IO[Unit] = IO.sleep(20.millis)
   private def awaitEqual[A: Eq](t: IO[A], success: A): IO[Unit] =
       t.flatMap(a => if (Eq[A].eqv(a, success)) IO.unit else smallDelay *> awaitEqual(t, success))
   
     test("MapRef.ofSingleImmutableMapRef - concurrent modifications") {
       val finalValue = 100
       val r = MapRef.ofSingleImmutableMap[IO, Unit, Int]().unsafeRunSync()
-      val modifies = List.fill(finalValue)(IO.shift *> r(()).update(_.map(_ + 1))).parSequence
-      val test = IO.shift *> r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
+      val modifies = List.fill(finalValue)(r(()).update(_.map(_ + 1))).parSequence
+      val test = r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
       test.map(_ => assert(true))
     }
 
@@ -212,8 +212,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
     test("MapRef.ofConcurrentHashMap - concurrent modifications") {
       val finalValue = 100
       val r = MapRef.ofConcurrentHashMap[IO, Unit, Int]().unsafeRunSync()
-      val modifies = List.fill(finalValue)(IO.shift *> r(()).update(_.map(_ + 1))).parSequence
-      val test = IO.shift *> r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
+      val modifies = List.fill(finalValue)(r(()).update(_.map(_ + 1))).parSequence
+      val test = r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
       test.map(_ => assert(true))
     }
 
@@ -362,8 +362,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
     test("MapRef.ofScalaConcurrentTrieMap - concurrent modifications") {
       val finalValue = 100
       val r = MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int].unsafeRunSync()
-      val modifies = List.fill(finalValue)(IO.shift *> r(()).update(_.map(_ + 1))).parSequence
-      val test = IO.shift *> r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
+      val modifies = List.fill(finalValue)(r(()).update(_.map(_ + 1))).parSequence
+      val test = r(()).set(Some(0)) *> modifies.start *> awaitEqual(r(()).get, finalValue.some)
       test.map(_ => assert(true))
     }
 

@@ -1,6 +1,6 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
-val Scala213 = "2.13.1"
+val Scala213 = "2.13.4"
 
 ThisBuild / crossScalaVersions := Seq("2.12.13", Scala213)
 ThisBuild / scalaVersion := crossScalaVersions.value.last
@@ -27,7 +27,7 @@ ThisBuild / githubWorkflowBuildPreamble ++=
   rubySetupSteps(Some(Scala213Cond))
 
 ThisBuild / githubWorkflowBuild := Seq(
-  WorkflowStep.Sbt(List("test", "mimaReportBinaryIssues")),
+  WorkflowStep.Sbt(List("test")),
 
   WorkflowStep.Sbt(
     List("site/makeMicrosite"),
@@ -110,8 +110,9 @@ lazy val site = project.in(file("site"))
     )
   }
 
-val catsV = "2.0.0"
-val catsEffectV = "2.0.0"
+val catsV = "2.4.1"
+val catsEffectV = "3.0.0-RC2"
+
 val munitCatsEffectV = "0.13.1"
 
 val kindProjectorV = "0.10.3"
@@ -125,8 +126,9 @@ lazy val commonSettings = Seq(
   addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % betterMonadicForV),
   libraryDependencies ++= Seq(
     "org.typelevel"               %% "cats-core"                  % catsV,
-    "org.typelevel"               %% "cats-effect"                % catsEffectV,
-    "org.typelevel"               %%% "munit-cats-effect-2"       % munitCatsEffectV  % Test,
+    "org.typelevel"               %% "cats-effect-kernel"         % catsEffectV,
+    "org.typelevel"               %% "cats-effect-std"            % catsEffectV % Test,
+    "org.typelevel"               %%% "munit-cats-effect-3"       % munitCatsEffectV  % Test,
   )
 )
 

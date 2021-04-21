@@ -110,10 +110,10 @@ lazy val site = project.in(file("site"))
     )
   }
 
-val catsV = "2.4.1"
-val catsEffectV = "3.0.0-RC2"
+val catsV = "2.6.0"
+val catsEffectV = "3.1.0"
 
-val munitCatsEffectV = "0.13.1"
+val munitCatsEffectV = "1.0.1"
 
 val kindProjectorV = "0.10.3"
 val betterMonadicForV = "0.3.1"

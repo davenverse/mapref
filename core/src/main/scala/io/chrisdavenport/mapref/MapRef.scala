@@ -501,4 +501,16 @@ object MapRef  {
 
   def ofScalaConcurrentTrieMap[F[_]: Sync, K, V]: F[MapRef[F, K, Option[V]]] = 
     inScalaConcurrentTrieMap[F, F,K, V]
+
+  implicit def mapRefInvariant[F[_]: Functor, K]: Invariant[MapRef[F, K, *]] =
+    new MapRefInvariant[F, K]
+
+  private[mapref] class MapRefInvariant[F[_]: Functor, K] extends Invariant[MapRef[F, K, *]] {
+    override def imap[V, V0](fa: MapRef[F, K, V])(f: V => V0)(g: V0 => V): MapRef[F, K, V0] =
+      new MapRef[F, K, V0] {
+
+        override def apply(k: K): Ref[F, V0] = fa(k).imap(f)(g)
+        override def keys: F[List[K]] = fa.keys
+      }
+  }
 }

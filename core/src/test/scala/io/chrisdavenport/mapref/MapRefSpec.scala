@@ -36,7 +36,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
-        (value, setter) <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         success <- setter(value.map(_ + 1))
         result <- r(()).get
       } yield success && result == Some(1)
@@ -47,7 +48,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
     test("MapRef.ofSingleImmutableMapRef - access - setter should fail if value is modified before setter is called with None/Some") {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
-        (value, setter) <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         _ <- r(()).set(Some(5))
         success <- setter(value.map(_ + 1))
         result <- r(()).get
@@ -60,7 +62,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
-        (value, setter) <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         _ <- r(()).set(Some(5))
         success <- setter(value.map(_ + 1))
         result <- r(()).get
@@ -73,7 +76,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
-        (value, setter) <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         _ <- r(()).set(Some(5))
         success <- setter(None)
         result <- r(()).get
@@ -86,7 +90,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
       val op = for {
         r <- MapRef.ofSingleImmutableMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
-        (value, setter)  <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         cond1 <- setter(value.map(_ + 1))
         _ <- r(()).set(value)
         cond2 <- setter(None)
@@ -232,7 +237,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
-        (value, setter) <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         success <- setter(value.map(_ + 1))
         result <- r(()).get
       } yield success && result == Some(1)
@@ -243,7 +249,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
     test("MapRef.ofConcurrentHashMap - access - setter should fail if value is modified before setter is called with None/Some") {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
-        (value, setter) <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         _ <- r(()).set(Some(5))
         success <- setter(value.map(_ + 1))
         result <- r(()).get
@@ -256,7 +263,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
-        (value, setter) <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         _ <- r(()).set(Some(5))
         success <- setter(value.map(_ + 1))
         result <- r(()).get
@@ -269,7 +277,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
-        (value, setter) <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         _ <- r(()).set(Some(5))
         success <- setter(None)
         result <- r(()).get
@@ -282,7 +291,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
       val op = for {
         r <- MapRef.ofConcurrentHashMap[IO, Unit, Int]()
         _ <- r(()).set(Some(0))
-        (value, setter)  <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         cond1 <- setter(value.map(_ + 1))
         _ <- r(()).set(value)
         cond2 <- setter(None)
@@ -382,7 +392,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         _ <- r(()).set(Some(0))
-        (value, setter) <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         success <- setter(value.map(_ + 1))
         result <- r(()).get
       } yield success && result == Some(1)
@@ -393,7 +404,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
     test("MapRef.ofScalaConcurrentTrieMap - access - setter should fail if value is modified before setter is called with None/Some" ) {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
-        (value, setter) <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         _ <- r(()).set(Some(5))
         success <- setter(value.map(_ + 1))
         result <- r(()).get
@@ -406,7 +418,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         _ <- r(()).set(Some(0))
-        (value, setter) <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         _ <- r(()).set(Some(5))
         success <- setter(value.map(_ + 1))
         result <- r(()).get
@@ -419,7 +432,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         _ <- r(()).set(Some(0))
-        (value, setter) <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         _ <- r(()).set(Some(5))
         success <- setter(None)
         result <- r(()).get
@@ -432,7 +446,8 @@ class MapRefSpec extends munit.CatsEffectSuite {
       val op = for {
         r <- MapRef.ofScalaConcurrentTrieMap[IO, Unit, Int]
         _ <- r(()).set(Some(0))
-        (value, setter)  <- r(()).access
+        accessed <- r(()).access
+        (value, setter) = accessed
         cond1 <- setter(value.map(_ + 1))
         _ <- r(()).set(value)
         cond2 <- setter(None)

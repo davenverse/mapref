@@ -1,8 +1,8 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
-val Scala213 = "2.13.4"
+val Scala213 = "2.13.6"
 
-ThisBuild / crossScalaVersions := Seq("2.12.13", Scala213)
+ThisBuild / crossScalaVersions := Seq("2.12.13", Scala213, "3.0.0")
 ThisBuild / scalaVersion := crossScalaVersions.value.last
 
 ThisBuild / githubWorkflowArtifactUpload := false
@@ -61,7 +61,7 @@ ThisBuild / githubWorkflowPublish := Seq(
 lazy val `mapref` = project.in(file("."))
   .disablePlugins(MimaPlugin)
   .settings(commonSettings)
-  .settings(skip in publish := true)
+  .settings(publish / skip := true)
   .aggregate(core)
 
 lazy val core = project.in(file("core"))
@@ -73,7 +73,7 @@ lazy val core = project.in(file("core"))
 lazy val site = project.in(file("site"))
   .disablePlugins(MimaPlugin)
   .settings(commonSettings)
-  .settings(skip in publish := true)
+  .settings(publish / skip := true)
   .dependsOn(core)
   .enablePlugins(MicrositesPlugin)
   .enablePlugins(MdocPlugin)
@@ -110,20 +110,26 @@ lazy val site = project.in(file("site"))
     )
   }
 
-val catsV = "2.6.0"
-val catsEffectV = "3.1.0"
+val catsV = "2.6.1"
+val catsEffectV = "3.1.1"
 
-val munitCatsEffectV = "1.0.1"
+val munitCatsEffectV = "1.0.3"
 
-val kindProjectorV = "0.10.3"
+val kindProjectorV = "0.13.0"
 val betterMonadicForV = "0.3.1"
 
 // General Settings
 lazy val commonSettings = Seq(
   testFrameworks += new TestFramework("munit.Framework"),
-
-  addCompilerPlugin("org.typelevel" % "kind-projector" % kindProjectorV cross CrossVersion.binary),
-  addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % betterMonadicForV),
+  libraryDependencies ++= (CrossVersion.partialVersion(scalaVersion.value) match {
+    case Some((2, _))=>
+      Seq(
+        compilerPlugin("org.typelevel" % "kind-projector" % kindProjectorV cross CrossVersion.full),
+        compilerPlugin("com.olegpy"    %% "better-monadic-for" % betterMonadicForV)
+      )
+    case _ =>
+      Nil
+  }),
   libraryDependencies ++= Seq(
     "org.typelevel"               %% "cats-core"                  % catsV,
     "org.typelevel"               %% "cats-effect-kernel"         % catsEffectV,
@@ -144,9 +150,9 @@ inThisBuild(List(
       url("https://github.com/ChristopherDavenport")
     )
   ),
-  scalacOptions in (Compile, doc) ++= Seq(
+  Compile / doc /scalacOptions ++= Seq(
       "-groups",
-      "-sourcepath", (baseDirectory in LocalRootProject).value.getAbsolutePath,
+      "-sourcepath", (LocalRootProject / baseDirectory).value.getAbsolutePath,
       "-doc-source-url", "https://github.com/ChristopherDavenport/mapref/blob/v" + version.value + "€{FILE_PATH}.scala"
   ),
 ))

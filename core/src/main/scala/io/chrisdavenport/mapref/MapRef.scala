@@ -49,7 +49,7 @@ object MapRef  {
         }
         current.get(k) match {
           case None =>
-            val set: Option[V] => F[Boolean] = { opt: Option[V] =>
+            val set: Option[V] => F[Boolean] = { (opt: Option[V]) =>
               opt match {
                 case None => thisRef.get.map(!_.isDefinedAt(k))
                 case Some(newV) =>
@@ -172,7 +172,7 @@ object MapRef  {
       .traverse(_ => Ref.in[G, F, Map[K, V]](Map.empty))
       .map(_.toArray)
       .map{ array => 
-        val refFunction = {k: K => 
+        val refFunction = { (k: K) =>
           val location = Math.abs(k.## % shardCount)
           array(location)
         }
@@ -215,7 +215,7 @@ object MapRef  {
           val hasBeenCalled = new AtomicBoolean(false)
           val init = chm.get(k)
           if (init == null) {
-            val set: Option[V] => F[Boolean] = { opt: Option[V] =>
+            val set: Option[V] => F[Boolean] = { (opt: Option[V]) =>
               opt match {
                 case None => sync.delay(hasBeenCalled.compareAndSet(false, true) && !chm.containsKey(k))
                 case Some(newV) =>
@@ -227,7 +227,7 @@ object MapRef  {
             }
             (None, set)
           } else {
-            val set: Option[V] => F[Boolean] = { opt: Option[V] =>
+            val set: Option[V] => F[Boolean] = { (opt: Option[V]) =>
               opt match {
                 case None =>
                   sync.delay(hasBeenCalled.compareAndSet(false, true) && chm.remove(k, init))
@@ -372,37 +372,37 @@ object MapRef  {
     val fnone0: F[None.type] = sync.pure(None)
     def fnone[A]: F[Option[A]] = fnone0.widen[Option[A]]
 
-      class HandleRef(k: K) extends Ref[F, Option[V]] {
-        def access: F[(Option[V], Option[V] => F[Boolean])] = 
-        sync.delay {
-          val hasBeenCalled = new AtomicBoolean(false)
-          val init = map.get(k) 
-          init match {
-            case None => 
-              val set: Option[V] => F[Boolean] = { opt: Option[V] =>
-                opt match {
-                  case None => 
-                    sync.delay(hasBeenCalled.compareAndSet(false, true) && !map.contains(k))
-                  case Some(newV) =>
-                    sync.delay {
-                      // it was initially empty
-                      hasBeenCalled.compareAndSet(false, true) && map.putIfAbsent(k, newV).isEmpty
-                    }
-                }
+    class HandleRef(k: K) extends Ref[F, Option[V]] {
+      def access: F[(Option[V], Option[V] => F[Boolean])] =
+      sync.delay {
+        val hasBeenCalled = new AtomicBoolean(false)
+        val init = map.get(k)
+        init match {
+          case None =>
+            val set: Option[V] => F[Boolean] = { (opt: Option[V]) =>
+              opt match {
+                case None =>
+                  sync.delay(hasBeenCalled.compareAndSet(false, true) && !map.contains(k))
+                case Some(newV) =>
+                  sync.delay {
+                    // it was initially empty
+                    hasBeenCalled.compareAndSet(false, true) && map.putIfAbsent(k, newV).isEmpty
+                  }
               }
-              (None, set)
-            case Some(old) => 
-              val set: Option[V] => F[Boolean] = { opt: Option[V] =>
-                opt match {
-                  case None =>
-                    sync.delay(hasBeenCalled.compareAndSet(false, true) && map.remove(k, old))
-                  case Some(newV) =>
-                    sync.delay(hasBeenCalled.compareAndSet(false, true) && map.replace(k, old, newV))
-                }
+            }
+            (None, set)
+          case Some(old) =>
+            val set: Option[V] => F[Boolean] = { (opt: Option[V]) =>
+              opt match {
+                case None =>
+                  sync.delay(hasBeenCalled.compareAndSet(false, true) && map.remove(k, old))
+                case Some(newV) =>
+                  sync.delay(hasBeenCalled.compareAndSet(false, true) && map.replace(k, old, newV))
               }
-              (init, set)
-          }
+            }
+            (init, set)
         }
+      }
 
       def get: F[Option[V]] =
         sync.delay {
@@ -434,46 +434,46 @@ object MapRef  {
           case Some(v) => sync.delay { map.put(k, v); () }
         }
 
-        def tryModify[B](f: Option[V] => (Option[V], B)): F[Option[B]] = // we need the suspend because we do effects inside
-          sync.defer {
-            val init = map.get(k)
-            init match {
-              case None => 
-                f(None) match {
-                  case (None, b) =>
-                    // no-op
-                    sync.pure(Some(b))
-                  case (Some(newV), b) =>
-                    sync.pure(map.putIfAbsent(k, newV).fold(b.some)(_ => None))
-                }
-              case Some(initV) => 
-                f(init) match {
-                  case (None, b) =>
-                    if (map.remove(k, initV)) sync.pure(Some(b))
-                    else fnone
-                  case (Some(next), b) =>
-                    if (map.replace(k, initV, next)) sync.pure(Some(b))
-                    else fnone
-                }
-            }
+      def tryModify[B](f: Option[V] => (Option[V], B)): F[Option[B]] = // we need the suspend because we do effects inside
+        sync.defer {
+          val init = map.get(k)
+          init match {
+            case None =>
+              f(None) match {
+                case (None, b) =>
+                  // no-op
+                  sync.pure(Some(b))
+                case (Some(newV), b) =>
+                  sync.pure(map.putIfAbsent(k, newV).fold(b.some)(_ => None))
+              }
+            case Some(initV) =>
+              f(init) match {
+                case (None, b) =>
+                  if (map.remove(k, initV)) sync.pure(Some(b))
+                  else fnone
+                case (Some(next), b) =>
+                  if (map.replace(k, initV, next)) sync.pure(Some(b))
+                  else fnone
+              }
           }
-
-        def tryModifyState[B](state: State[Option[V], B]): F[Option[B]] =
-          tryModify(state.run(_).value)
-  
-        def tryUpdate(f: Option[V] => Option[V]): F[Boolean] =
-          tryModify { opt =>
-            (f(opt), ())
-          }.map(_.isDefined)
-  
-        def update(f: Option[V] => Option[V]): F[Unit] = {
-          lazy val loop: F[Unit] = tryUpdate(f).flatMap {
-            case true  => sync.unit
-            case false => loop
-          }
-          loop
         }
+
+      def tryModifyState[B](state: State[Option[V], B]): F[Option[B]] =
+        tryModify(state.run(_).value)
+  
+      def tryUpdate(f: Option[V] => Option[V]): F[Boolean] =
+        tryModify { opt =>
+          (f(opt), ())
+        }.map(_.isDefined)
+  
+      def update(f: Option[V] => Option[V]): F[Unit] = {
+        lazy val loop: F[Unit] = tryUpdate(f).flatMap {
+          case true  => sync.unit
+          case false => loop
+        }
+        loop
       }
+    }
 
     /**
      * Access the reference for this Key

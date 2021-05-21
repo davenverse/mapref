@@ -29,7 +29,7 @@ trait MapRef[F[_], K, V] extends Function1[K, Ref[F, V]]{
   def keys: F[List[K]]
 }
 
-object MapRef  {
+object MapRef extends MapRefCompanionPlatform {
 
   private class ShardedImmutableMapImpl[F[_]: Sync, K, V](
     ref: K => Ref[F, Map[K, V]],
@@ -494,13 +494,6 @@ object MapRef  {
    **/
   def fromScalaConcurrentMap[F[_]: Sync, K, V](map: scala.collection.concurrent.Map[K, V]): MapRef[F, K, Option[V]] = 
     new ScalaConcurrentMapImpl[F, K, V](map)
-
-  def inScalaConcurrentTrieMap[G[_]: Sync, F[_]: Sync, K, V]: G[MapRef[F, K, Option[V]]] = 
-    Sync[G].delay(scala.collection.concurrent.TrieMap.empty[K,V])
-      .map(fromScalaConcurrentMap[F, K, V](_))
-
-  def ofScalaConcurrentTrieMap[F[_]: Sync, K, V]: F[MapRef[F, K, Option[V]]] = 
-    inScalaConcurrentTrieMap[F, F,K, V]
 
   implicit def mapRefInvariant[F[_]: Functor, K]: Invariant[MapRef[F, K, *]] =
     new MapRefInvariant[F, K]

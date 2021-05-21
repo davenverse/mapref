@@ -62,19 +62,25 @@ lazy val `mapref` = project.in(file("."))
   .disablePlugins(MimaPlugin)
   .settings(commonSettings)
   .settings(publish / skip := true)
-  .aggregate(core)
+  .aggregate(core.jvm, core.js)
 
-lazy val core = project.in(file("core"))
+lazy val core = crossProject(JVMPlatform, JSPlatform)
+  .crossType(CrossType.Full)
+  .in(file("core"))
   .settings(commonSettings)
   .settings(
     name := "mapref"
+  )
+  .jsSettings(
+    // Required for munit to work, see https://github.com/scalameta/munit/issues/247
+    Test / scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.CommonJSModule))
   )
 
 lazy val site = project.in(file("site"))
   .disablePlugins(MimaPlugin)
   .settings(commonSettings)
   .settings(publish / skip := true)
-  .dependsOn(core)
+  .dependsOn(core.jvm)
   .enablePlugins(MicrositesPlugin)
   .enablePlugins(MdocPlugin)
   .settings{
@@ -131,9 +137,9 @@ lazy val commonSettings = Seq(
       Nil
   }),
   libraryDependencies ++= Seq(
-    "org.typelevel"               %% "cats-core"                  % catsV,
-    "org.typelevel"               %% "cats-effect-kernel"         % catsEffectV,
-    "org.typelevel"               %% "cats-effect-std"            % catsEffectV % Test,
+    "org.typelevel"               %%% "cats-core"                  % catsV,
+    "org.typelevel"               %%% "cats-effect-kernel"         % catsEffectV,
+    "org.typelevel"               %%% "cats-effect-std"            % catsEffectV % Test,
     "org.typelevel"               %%% "munit-cats-effect-3"       % munitCatsEffectV  % Test,
   )
 )

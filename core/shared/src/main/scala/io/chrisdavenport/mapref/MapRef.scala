@@ -1,9 +1,10 @@
 package io.chrisdavenport.mapref
 
 import cats._
+import cats.conversions.all._
 import cats.syntax.all._
 import cats.data._
-import cats.effect.kernel.{Ref, Sync}
+import cats.effect.kernel._
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
@@ -19,30 +20,22 @@ trait MapRef[F[_], K, V] extends Function1[K, Ref[F, V]]{
    * Access the reference for this Key
    */
   def apply(k: K): Ref[F, V]
-
-  /** 
-   * Snapshot of keys, may be concurrently updated after this snapshot
-   * Experimental: Original interface was only apply, currently all
-   * backends can implement this smoothly and its useful for operations you
-   * need to do things to all the References.
-   **/
-  def keys: F[List[K]]
 }
 
-object MapRef  {
+object MapRef extends MapRefCompanionPlatform  {
 
-  private class ShardedImmutableMapImpl[F[_]: Sync, K, V](
+  private class ShardedImmutableMapImpl[F[_]: Concurrent, K, V](
     ref: K => Ref[F, Map[K, V]],
     val keys: F[List[K]]
   ) extends MapRef[F, K, Option[V]]{
     class HandleRef(k: K) extends Ref[F, Option[V]] {
 
       def access: F[(Option[V], Option[V] => F[Boolean])] = for {
-        hasBeenCalled <- Sync[F].delay(new AtomicBoolean(false))
+        hasBeenCalled <- Applicative[F].unit.map(_ => new AtomicBoolean(false))
         thisRef = ref(k)
         current <- thisRef.get
       } yield {
-        val checkCalled = Sync[F].delay(hasBeenCalled.compareAndSet(false, true))
+        val checkCalled = Applicative[F].unit.map(_ => hasBeenCalled.compareAndSet(false, true))
         def endSet(f: Option[V] => F[Boolean]): Option[V] => F[Boolean] = {opt => 
           checkCalled
             .ifM(f(opt), Applicative[F].pure(false))
@@ -154,72 +147,85 @@ object MapRef  {
    * given an efficient and equally distributed Hash, the contention
    * should allow for interaction like a general datastructure.
    */
-  def ofShardedImmutableMap[ F[_]: Sync, K, V](
+  def ofShardedImmutableMap[F[_]: Concurrent, K, V](
     shardCount: Int
-  ): F[MapRef[F, K, Option[V]]]  = 
-    inShardedImmutableMap[F, F, K, V](shardCount)
+  ): F[MapRef[F, K, Option[V]]]  = {
+    assert(shardCount >= 1, "MapRef.sharded should have at least 1 shard")
+    List.fill(shardCount)(())
+      .traverse(_ => Concurrent[F].ref[Map[K, V]](Map.empty))
+      .map(fromSeqRefs(_))
+  }
 
   /**
    * Creates a sharded map ref to reduce atomic contention on the Map,
    * given an efficient and equally distributed Hash, the contention
    * should allow for interaction like a general datastructure. Created in G, operates in F.
    */
-  def inShardedImmutableMap[G[_]: Sync, F[_]: Sync, K, V](
+  def inShardedImmutableMap[G[_]: Sync, F[_]: Async, K, V](
     shardCount: Int
   ): G[MapRef[F, K, Option[V]]] = Sync[G].defer {
     assert(shardCount >= 1, "MapRef.sharded should have at least 1 shard")
     List.fill(shardCount)(())
       .traverse(_ => Ref.in[G, F, Map[K, V]](Map.empty))
-      .map(_.toArray)
-      .map{ array => 
-        val refFunction = { (k: K) =>
-          val location = Math.abs(k.## % shardCount)
-          array(location)
-        }
-        val keys = array.toList.traverse(ref => ref.get.map(_.keys.toList)).map(_.flatten)
-        new ShardedImmutableMapImpl[F, K, V](refFunction, keys)
-      }
+      .map(fromSeqRefs(_))
+  }
+
+  def fromSeqRefs[F[_]: Concurrent, K, V](
+    seq: scala.collection.immutable.Seq[Ref[F, Map[K, V]]]
+  ): MapRef[F, K, Option[V]] = {
+    val array = seq.toArray
+    val shardCount = seq.size
+    val refFunction = { (k: K) =>
+    val location = Math.abs(k.## % shardCount)
+      array(location)
+    }
+    val keys = array.toList.traverse(ref => ref.get.map(_.keys.toList)).map(_.flatten)
+    new ShardedImmutableMapImpl[F, K, V](refFunction, keys)
   }
 
   /**
    * Heavy Contention on Use
    */
-  def ofSingleImmutableMap[F[_]: Sync, K, V](map: Map[K, V] = Map.empty[K, V]): F[MapRef[F, K, Option[V]]] = 
-    inSingleImmutableMap[F, F, K, V](map)
+  def ofSingleImmutableMap[F[_]: Concurrent , K, V](map: Map[K, V] = Map.empty[K, V]): F[MapRef[F, K, Option[V]]] = 
+    Concurrent[F].ref(map)
+      .map(fromSingleImmutableMapRef[F, K, V](_))
   
   /**
    * Heavy Contention on Use. Created in G, operates in F.
    **/
-  def inSingleImmutableMap[G[_]: Sync, F[_]: Sync, K, V](map: Map[K, V] = Map.empty[K, V]): G[MapRef[F, K, Option[V]]] = 
+  def inSingleImmutableMap[G[_]: Sync, F[_]: Async, K, V](map: Map[K, V] = Map.empty[K, V]): G[MapRef[F, K, Option[V]]] = 
     Ref.in[G, F, Map[K, V]](map)
-      .map(fromSingleImmutableMapRef[F, K, V])
+      .map(fromSingleImmutableMapRef[F, K, V](_))
 
   /**
    * Heavy Contention on Use, Allows you to access the underlying map through
    * processes outside of this interface. Useful for Atomic Map[K, V] => Map[K, V] interactions.
    **/
-  def fromSingleImmutableMapRef[F[_]: Sync, K, V](ref: Ref[F, Map[K, V]]): MapRef[F, K, Option[V]] = 
+  def fromSingleImmutableMapRef[F[_]: Concurrent, K, V](ref: Ref[F, Map[K, V]]): MapRef[F, K, Option[V]] = 
     new ShardedImmutableMapImpl[F, K, V](_ => ref, ref.get.map(_.keys.toList))
 
-  private class ConcurrentHashMapImpl[F[_], K, V](chm: ConcurrentHashMap[K, V], sync: Sync[F])
-    extends MapRef[F, K, Option[V]] {
-    private implicit def syncF: Sync[F] = sync
 
-    val fnone0: F[None.type] = sync.pure(None)
+  private class ConcurrentHashMapImpl[F[_], K, V](chm: ConcurrentHashMap[K, V], concurrent: Concurrent[F])
+    extends MapRef[F, K, Option[V]] {
+    private implicit def concurrentF: Concurrent[F] = concurrent
+
+    val fnone0: F[None.type] = concurrent.pure(None)
     def fnone[A]: F[Option[A]] = fnone0.widen[Option[A]]
+
+    def delay[A](a: => A): F[A] = concurrent.unit.map(_ => a)
 
     class HandleRef(k: K) extends Ref[F, Option[V]] {
 
       def access: F[(Option[V], Option[V] => F[Boolean])] = 
-        sync.delay {
+        delay {
           val hasBeenCalled = new AtomicBoolean(false)
           val init = chm.get(k)
           if (init == null) {
             val set: Option[V] => F[Boolean] = { (opt: Option[V]) =>
               opt match {
-                case None => sync.delay(hasBeenCalled.compareAndSet(false, true) && !chm.containsKey(k))
+                case None => delay(hasBeenCalled.compareAndSet(false, true) && !chm.containsKey(k))
                 case Some(newV) =>
-                  sync.delay {
+                  delay {
                     // it was initially empty
                     hasBeenCalled.compareAndSet(false, true) && chm.putIfAbsent(k, newV) == null
                   }
@@ -230,9 +236,9 @@ object MapRef  {
             val set: Option[V] => F[Boolean] = { (opt: Option[V]) =>
               opt match {
                 case None =>
-                  sync.delay(hasBeenCalled.compareAndSet(false, true) && chm.remove(k, init))
+                  delay(hasBeenCalled.compareAndSet(false, true) && chm.remove(k, init))
                 case Some(newV) =>
-                  sync.delay(hasBeenCalled.compareAndSet(false, true) && chm.replace(k, init, newV))
+                  delay(hasBeenCalled.compareAndSet(false, true) && chm.replace(k, init, newV))
               }
             }
             (Some(init), set)
@@ -240,22 +246,22 @@ object MapRef  {
         }
 
       def get: F[Option[V]] =
-        sync.delay {
+        delay {
           Option(chm.get(k))
         }
 
       override def getAndSet(a: Option[V]): F[Option[V]] =
         a match {
           case None =>
-            sync.delay(Option(chm.remove(k)))
+            delay(Option(chm.remove(k)))
           case Some(v) =>
-            sync.delay(Option(chm.put(k, v)))
+            delay(Option(chm.put(k, v)))
         }
 
       def modify[B](f: Option[V] => (Option[V], B)): F[B] = {
         lazy val loop: F[B] = tryModify(f).flatMap {
           case None    => loop
-          case Some(b) => sync.pure(b)
+          case Some(b) => concurrent.pure(b)
         }
         loop
       }
@@ -265,35 +271,35 @@ object MapRef  {
 
       def set(a: Option[V]): F[Unit] =
         a match {
-          case None    => sync.delay { chm.remove(k); () }
-          case Some(v) => sync.delay { chm.put(k, v); () }
+          case None    => delay { chm.remove(k); () }
+          case Some(v) => delay { chm.put(k, v); () }
         }
 
       def tryModify[B](f: Option[V] => (Option[V], B)): F[Option[B]] =
         // we need the suspend because we do effects inside
-        sync.defer {
+      delay {
           val init = chm.get(k)
           if (init == null) {
             f(None) match {
               case (None, b) =>
                 // no-op
-                sync.pure(Some(b))
+                concurrent.pure(b.some)
               case (Some(newV), b) =>
-                if (chm.putIfAbsent(k, newV) == null) sync.pure(Some(b))
+                if (chm.putIfAbsent(k, newV) == null) concurrent.pure(b.some)
                 else fnone
             }
           } else {
             f(Some(init)) match {
               case (None, b) =>
-                if (chm.remove(k, init)) sync.pure(Some(b))
-                else fnone
+                if (chm.remove(k, init)) concurrent.pure(Some(b))
+                else fnone[B]
               case (Some(next), b) =>
-                if (chm.replace(k, init, next)) sync.pure(Some(b))
-                else fnone
+                if (chm.replace(k, init, next)) concurrent.pure(Some(b))
+                else fnone[B]
 
             }
           }
-        }
+        }.flatten
 
       def tryModifyState[B](state: State[Option[V], B]): F[Option[B]] =
         tryModify(state.run(_).value)
@@ -305,14 +311,14 @@ object MapRef  {
 
       def update(f: Option[V] => Option[V]): F[Unit] = {
         lazy val loop: F[Unit] = tryUpdate(f).flatMap {
-          case true  => sync.unit
+          case true  => concurrent.unit
           case false => loop
         }
         loop
       }
     }
 
-    val keys: F[List[K]] = sync.delay{
+    val keys: F[List[K]] = delay{
       val k = chm.keys()
       val builder = new mutable.ListBuffer[K]
       if (k != null){
@@ -330,8 +336,8 @@ object MapRef  {
   /**
    * Takes a ConcurrentHashMap, giving you access to the mutable state from the constructor.
    **/
-  def fromConcurrentHashMap[F[_]: Sync, K, V](map: ConcurrentHashMap[K, V]): MapRef[F, K, Option[V]] = 
-    new ConcurrentHashMapImpl[F, K, V](map, Sync[F])
+  def fromConcurrentHashMap[F[_]: Concurrent, K, V](map: ConcurrentHashMap[K, V]): MapRef[F, K, Option[V]] = 
+    new ConcurrentHashMapImpl[F, K, V](map, Concurrent[F])
 
   /**
    * This allocates mutable memory, so it has to be inside F. The way to use things like this is to
@@ -341,14 +347,13 @@ object MapRef  {
    * which means the thing that needs it will also have to be inside of `F[_]`, which is because
    * it needs access to mutable state so allocating it is also an effect.
    */
-  def inConcurrentHashMap[G[_]: Sync, F[_]: Sync, K, V](
+  def inConcurrentHashMap[G[_]: Sync, F[_]: Concurrent, K, V](
     initialCapacity: Int = 16,
     loadFactor: Float = 0.75f,
     concurrencyLevel: Int = 16
   ): G[MapRef[F, K, Option[V]]] =
-    Sync[G].delay{
-      fromConcurrentHashMap[F, K, V](new ConcurrentHashMap[K, V](initialCapacity, loadFactor, concurrencyLevel))
-    }
+    Sync[G].delay(new ConcurrentHashMap[K, V](initialCapacity, loadFactor, concurrencyLevel))
+      .map(fromConcurrentHashMap[F, K, V])
 
   /**
    * This allocates mutable memory, so it has to be inside F. The way to use things like this is to
@@ -358,149 +363,14 @@ object MapRef  {
    * which means the thing that needs it will also have to be inside of `F[_]`, which is because
    * it needs access to mutable state so allocating it is also an effect.
    */
-  def ofConcurrentHashMap[F[_]: Sync, K, V](
+  def ofConcurrentHashMap[F[_]: Concurrent, K, V](
     initialCapacity: Int = 16,
     loadFactor: Float = 0.75f,
     concurrencyLevel: Int = 16
   ): F[MapRef[F, K, Option[V]]] = 
-    inConcurrentHashMap[F, F, K, V](initialCapacity, loadFactor, concurrencyLevel)
+    Concurrent[F].unit.map(_ => new ConcurrentHashMap[K, V](initialCapacity, loadFactor, concurrencyLevel))
+      .map(fromConcurrentHashMap[F, K, V])
 
-
-  private class ScalaConcurrentMapImpl[F[_], K, V](map: scala.collection.concurrent.Map[K, V])(implicit sync: Sync[F])
-    extends MapRef[F, K, Option[V]]{
-
-    val fnone0: F[None.type] = sync.pure(None)
-    def fnone[A]: F[Option[A]] = fnone0.widen[Option[A]]
-
-    class HandleRef(k: K) extends Ref[F, Option[V]] {
-      def access: F[(Option[V], Option[V] => F[Boolean])] =
-      sync.delay {
-        val hasBeenCalled = new AtomicBoolean(false)
-        val init = map.get(k)
-        init match {
-          case None =>
-            val set: Option[V] => F[Boolean] = { (opt: Option[V]) =>
-              opt match {
-                case None =>
-                  sync.delay(hasBeenCalled.compareAndSet(false, true) && !map.contains(k))
-                case Some(newV) =>
-                  sync.delay {
-                    // it was initially empty
-                    hasBeenCalled.compareAndSet(false, true) && map.putIfAbsent(k, newV).isEmpty
-                  }
-              }
-            }
-            (None, set)
-          case Some(old) =>
-            val set: Option[V] => F[Boolean] = { (opt: Option[V]) =>
-              opt match {
-                case None =>
-                  sync.delay(hasBeenCalled.compareAndSet(false, true) && map.remove(k, old))
-                case Some(newV) =>
-                  sync.delay(hasBeenCalled.compareAndSet(false, true) && map.replace(k, old, newV))
-              }
-            }
-            (init, set)
-        }
-      }
-
-      def get: F[Option[V]] =
-        sync.delay {
-          map.get(k)
-        }
-
-      override def getAndSet(a: Option[V]): F[Option[V]] =
-        a match {
-          case None =>
-            sync.delay(map.remove(k))
-          case Some(v) =>
-            sync.delay(map.put(k, v))
-        }
-
-      def modify[B](f: Option[V] => (Option[V], B)): F[B] = {
-        lazy val loop: F[B] = tryModify(f).flatMap {
-          case None    => loop
-          case Some(b) => sync.pure(b)
-        }
-        loop
-      }
-
-      def modifyState[B](state: State[Option[V], B]): F[B] =
-        modify(state.run(_).value)
-
-      def set(a: Option[V]): F[Unit] =
-        a match {
-          case None    => sync.delay { map.remove(k); () }
-          case Some(v) => sync.delay { map.put(k, v); () }
-        }
-
-      def tryModify[B](f: Option[V] => (Option[V], B)): F[Option[B]] = // we need the suspend because we do effects inside
-        sync.defer {
-          val init = map.get(k)
-          init match {
-            case None =>
-              f(None) match {
-                case (None, b) =>
-                  // no-op
-                  sync.pure(Some(b))
-                case (Some(newV), b) =>
-                  sync.pure(map.putIfAbsent(k, newV).fold(b.some)(_ => None))
-              }
-            case Some(initV) =>
-              f(init) match {
-                case (None, b) =>
-                  if (map.remove(k, initV)) sync.pure(Some(b))
-                  else fnone
-                case (Some(next), b) =>
-                  if (map.replace(k, initV, next)) sync.pure(Some(b))
-                  else fnone
-              }
-          }
-        }
-
-      def tryModifyState[B](state: State[Option[V], B]): F[Option[B]] =
-        tryModify(state.run(_).value)
-  
-      def tryUpdate(f: Option[V] => Option[V]): F[Boolean] =
-        tryModify { opt =>
-          (f(opt), ())
-        }.map(_.isDefined)
-  
-      def update(f: Option[V] => Option[V]): F[Unit] = {
-        lazy val loop: F[Unit] = tryUpdate(f).flatMap {
-          case true  => sync.unit
-          case false => loop
-        }
-        loop
-      }
-    }
-
-    /**
-     * Access the reference for this Key
-     */
-    def apply(k: K): Ref[F, Option[V]] = new HandleRef(k)
-
-    /** 
-     * Snapshot of keys, may be concurrently updated after this snapshot
-     * Experimental: Original interface was only apply, currently all
-     * backends can implement this smoothly and its useful for operations you
-     * need to do things to all the References.
-     **/
-    def keys: F[List[K]] = Sync[F].delay(map.keys.toList)
-  }
-
-  /**
-   * Takes a scala.collection.conurrent.Map, giving you access to the mutable state from the constructor.
-   **/
-  def fromScalaConcurrentMap[F[_]: Sync, K, V](map: scala.collection.concurrent.Map[K, V]): MapRef[F, K, Option[V]] = 
-    new ScalaConcurrentMapImpl[F, K, V](map)
-
-  def inScalaConcurrentTrieMap[G[_]: Sync, F[_]: Sync, K, V]: G[MapRef[F, K, Option[V]]] = 
-    Sync[G].delay(scala.collection.concurrent.TrieMap.empty[K,V])
-      .map(fromScalaConcurrentMap[F, K, V](_))
-
-  def ofScalaConcurrentTrieMap[F[_]: Sync, K, V]: F[MapRef[F, K, Option[V]]] = 
-    inScalaConcurrentTrieMap[F, F,K, V]
 
   implicit def mapRefInvariant[F[_]: Functor, K]: Invariant[MapRef[F, K, *]] =
     new MapRefInvariant[F, K]
@@ -510,7 +380,6 @@ object MapRef  {
       new MapRef[F, K, V0] {
 
         override def apply(k: K): Ref[F, V0] = fa(k).imap(f)(g)
-        override def keys: F[List[K]] = fa.keys
       }
   }
 }

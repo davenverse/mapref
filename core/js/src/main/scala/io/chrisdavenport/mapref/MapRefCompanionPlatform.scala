@@ -1,5 +1,5 @@
 package io.chrisdavenport.mapref
 
-trait MapRefCompanionPlatform {
+private[mapref] trait MapRefCompanionPlatform {
   
 }

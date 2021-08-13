@@ -3,7 +3,7 @@ package io.chrisdavenport.mapref
 import cats.syntax.all._
 import cats.effect.kernel._
 
-trait MapRefCompanionPlatform {
+private[mapref] trait MapRefCompanionPlatform {
   
   def inScalaConcurrentTrieMap[G[_]: Sync, F[_]: Concurrent, K, V]: G[MapRef[F, K, Option[V]]] = 
     Sync[G].delay(scala.collection.concurrent.TrieMap.empty[K,V])

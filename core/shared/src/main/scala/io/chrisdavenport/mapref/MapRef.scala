@@ -506,4 +506,73 @@ object MapRef extends MapRefCompanionPlatform  {
         override def apply(k: K): Ref[F, V0] = fa(k).imap(f)(g)
       }
   }
+
+
+  /**
+   * Operates with default and anytime default is present instead information is removed from underlying ref.
+   * This is very useful as a default state can be used to prevent space leaks over high arity maprefs.
+   * 
+   * Also useful for anytime a shared storage location is used for a ref, i.e. DB or Redis to not waste
+   * space.
+   **/
+  def defaultedRef[F[_]: Functor, A: Eq](ref: Ref[F, Option[A]], default: A): Ref[F, A] = 
+    new LiftedRefDefaultStorage[F, A](ref, default)
+
+  def defaultedMapRef[F[_]: Functor, K, A: Eq](mapref: MapRef[F, K, Option[A]], default: A): MapRef[F, K, A] = {
+    new MapRef[F, K, A] {
+      def apply(k: K): Ref[F,A] = defaultedRef(mapref(k), default)
+    }
+  }
+  
+
+    /**
+   * Operates with default and anytime default is present instead information is removed from underlying ref.
+   **/
+  private class LiftedRefDefaultStorage[F[_]: Functor, A: Eq](
+    val ref: Ref[F, Option[A]],
+    val default: A
+  ) extends Ref[F, A]{
+    def get: F[A] = ref.get.map(_.getOrElse(default))
+    
+    def set(a: A): F[Unit] = {
+      if (a =!= default) ref.set(a.some)
+      else ref.set(None)
+    }
+    
+    def access: F[(A, A => F[Boolean])] = ref.access.map{
+      case (opt, cb) => 
+        (opt.getOrElse(default), {(s: A) => 
+          if (s =!= default) cb(s.some)
+          else cb(None)
+        })
+    }
+    
+    def tryUpdate(f: A => A): F[Boolean] = 
+      tryModify{(s: A) => (f(s), ())}.map(_.isDefined)
+    
+    def tryModify[B](f: A => (A, B)): F[Option[B]] =
+      ref.tryModify{opt => 
+        val s = opt.getOrElse(default)
+        val (after, out) = f(s)
+        if (after =!= default) (after.some, out)
+        else (None, out)
+      }
+    
+    def update(f: A => A): F[Unit] = 
+      modify((s: A) => (f(s), ()))
+    
+    def modify[B](f: A => (A, B)): F[B] = 
+      ref.modify{opt => 
+        val a = opt.getOrElse(default)
+        val (out, b) = f(a)
+        if (out =!= default) (out.some, b)
+        else (None, b)
+      }
+    
+    def tryModifyState[B](state: cats.data.State[A,B]): F[Option[B]] = 
+      tryModify{s => state.run(s).value}
+    
+    def modifyState[B](state: cats.data.State[A,B]): F[B] = 
+      modify{s => state.run(s).value}
+  }
 }

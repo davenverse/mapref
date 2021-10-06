@@ -1,4 +1,5 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
+import com.typesafe.tools.mima.core._
 
 ThisBuild / crossScalaVersions := Seq("2.12.14", "2.13.6", "3.0.0")
 
@@ -24,6 +25,12 @@ lazy val core = crossProject(JSPlatform, JVMPlatform)
       "org.typelevel"               %%% "cats-effect-kernel"         % catsEffectV,
       "org.typelevel"               %%% "cats-effect-std"            % catsEffectV % Test,
       "org.typelevel"               %%% "munit-cats-effect-3"       % munitCatsEffectV  % Test,
+    ),
+    mimaBinaryIssueFilters ++= Seq(
+      ProblemFilters.exclude[DirectMissingMethodProblem]("io.chrisdavenport.mapref.MapRef.ofScalaConcurrentTrieMap"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("io.chrisdavenport.mapref.MapRef.inScalaConcurrentTrieMap"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("io.chrisdavenport.mapref.MapRefCompanionPlatform.inScalaConcurrentTrieMap"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("io.chrisdavenport.mapref.MapRefCompanionPlatform.ofScalaConcurrentTrieMap")
     )
   ).jsSettings(
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule)},

@@ -541,14 +541,14 @@ object MapRef extends MapRefCompanionPlatform  {
     
     def access: F[(A, A => F[Boolean])] = ref.access.map{
       case (opt, cb) => 
-        (opt.getOrElse(default), {s: A => 
+        (opt.getOrElse(default), {(s: A) => 
           if (s =!= default) cb(s.some)
           else cb(None)
         })
     }
     
     def tryUpdate(f: A => A): F[Boolean] = 
-      tryModify{s: A => (f(s), ())}.map(_.isDefined)
+      tryModify{(s: A) => (f(s), ())}.map(_.isDefined)
     
     def tryModify[B](f: A => (A, B)): F[Option[B]] =
       ref.tryModify{opt => 

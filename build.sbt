@@ -7,7 +7,7 @@ ThisBuild / testFrameworks += new TestFramework("munit.Framework")
 
 val catsV = "2.6.1"
 val catsEffectV = "3.2.1"
-val munitCatsEffectV = "1.0.3"
+val munitCatsEffectV = "1.0.7"
 
 
 lazy val `mapref` = project.in(file("."))

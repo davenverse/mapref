@@ -1,7 +1,7 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 import com.typesafe.tools.mima.core._
 
-ThisBuild / crossScalaVersions := Seq("2.12.14", "2.13.6", "3.0.0")
+ThisBuild / crossScalaVersions := Seq("2.12.18", "2.13.6", "3.0.0")
 
 ThisBuild / testFrameworks += new TestFramework("munit.Framework")
 

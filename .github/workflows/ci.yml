@@ -28,7 +28,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-22.04]
-        scala: [2.12, 2.13, 3]
+        scala: [2.13, 3]
         java: [temurin@8]
         project: [maprefJS, maprefJVM]
     runs-on: ${{ matrix.os }}
@@ -118,26 +118,6 @@ jobs:
       - name: sbt update
         if: matrix.java == 'temurin@8' && steps.setup-java-temurin-8.outputs.cache-hit == 'false'
         run: sbt +update
-
-      - name: Download target directories (2.12, maprefJS)
-        uses: actions/download-artifact@v6
-        with:
-          name: target-${{ matrix.os }}-${{ matrix.java }}-2.12-maprefJS
-
-      - name: Inflate target directories (2.12, maprefJS)
-        run: |
-          tar xf targets.tar
-          rm targets.tar
-
-      - name: Download target directories (2.12, maprefJVM)
-        uses: actions/download-artifact@v6
-        with:
-          name: target-${{ matrix.os }}-${{ matrix.java }}-2.12-maprefJVM
-
-      - name: Inflate target directories (2.12, maprefJVM)
-        run: |
-          tar xf targets.tar
-          rm targets.tar
 
       - name: Download target directories (2.13, maprefJS)
         uses: actions/download-artifact@v6
@@ -236,7 +216,7 @@ jobs:
       - name: Submit Dependencies
         uses: scalacenter/sbt-dependency-submission@v2
         with:
-          modules-ignore: site_2.12 site_2.13 site_3 maprefjs_2.12 maprefjs_2.13 maprefjs_3 maprefnative_2.12 maprefnative_2.13 maprefnative_3 maprefjvm_2.12 maprefjvm_2.13 maprefjvm_3
+          modules-ignore: site_2.13 site_3 maprefjs_2.13 maprefjs_3 maprefnative_2.13 maprefnative_3 maprefjvm_2.13 maprefjvm_3
           configs-ignore: test scala-tool scala-doc-tool test-internal
 
   site:

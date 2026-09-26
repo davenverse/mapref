@@ -15,14 +15,14 @@ ThisBuild / developers := List(
 ThisBuild / tlCiReleaseBranches := Seq()
 
 val Scala213 = "2.13.18"
-ThisBuild / crossScalaVersions := Seq("2.12.20", Scala213, "3.3.8")
+ThisBuild / crossScalaVersions := Seq(Scala213, "3.3.8")
 ThisBuild / scalaVersion := Scala213
 
 ThisBuild / testFrameworks += new TestFramework("munit.Framework")
 
-val catsV = "2.6.1"
-val catsEffectV = "3.2.1"
-val munitCatsEffectV = "1.0.3"
+val catsV = "2.13.0"
+val catsEffectV = "3.7.1"
+val munitCatsEffectV = "2.2.1"
 
 lazy val `mapref` = tlCrossRootProject.aggregate(core)
 
@@ -52,7 +52,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform)
       "org.typelevel"               %%% "cats-core"                  % catsV,
       "org.typelevel"               %%% "cats-effect-kernel"         % catsEffectV,
       "org.typelevel"               %%% "cats-effect-std"            % catsEffectV % Test,
-      "org.typelevel"               %%% "munit-cats-effect-3"       % munitCatsEffectV  % Test,
+      "org.typelevel"               %%% "munit-cats-effect"       % munitCatsEffectV  % Test,
     ),
     mimaBinaryIssueFilters ++= Seq(
       ProblemFilters.exclude[DirectMissingMethodProblem]("io.chrisdavenport.mapref.MapRef.ofScalaConcurrentTrieMap"),
